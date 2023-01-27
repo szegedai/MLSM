@@ -1,0 +1,10 @@
+__pycache__
+*.log
+*.sh
+*.txt
+!requirements.txt
+models
+checkpoints
+tmp
+*.swp
+*.json
