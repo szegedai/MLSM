@@ -4,6 +4,10 @@ This is the source code for the paper [_Masked Latent Semantic Modeling: an Effi
 
 MLSM serves as a sample efficient alternative for traditional masked language modeling (MLM), during which the pre-training goal is not to recover he exact identity of the randomly selected subtokens, but to predict their distribution of latent semantic properties determined in an unsupervised and context-sensitive manner.
 
+## Pre-trained model availability
+
+A BERT medium model pre-trained using the HuggingFace library is also made available [via this link](https://huggingface.co/SzegedAI/bert-medium-mlsm).
+
 ## BibTeX
 
 ```
