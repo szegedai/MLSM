@@ -20,7 +20,6 @@ import sparser
 
 import torch
 import torch_optimizer
-import transformers
 from transformers import AutoConfig, AutoModel, AutoTokenizer, AutoModelForMaskedLM, AutoModelForTokenClassification, ElectraForMaskedLM, ElectraForPreTraining, get_scheduler
 
 import argparse
