@@ -42,7 +42,7 @@ python pretrainer.py --transformer ${MODEL} \\
                      --out_dir ${AUXILIARY_MODEL_LOCATION} \\
                      --data_location ${PRETRAINING_DATA} \\
                      --training_seqs 102400000 \\
-                     --batch 32 --grad_accum 32
+                     --batch 64 --grad_accum 16
 ```
 As for defining the ```${MODEL}```, it is possible to provide a custom model config file, but it is also possible to refer to an already existing model configuration, such as ```google-bert/bert-base-cased```.  
 
@@ -60,8 +60,8 @@ The input files are expected to be (optionally gzipped) UTF-8 encoded text files
 
 The ```--training_seqs``` command line argument indicates how many input sequences to be considered during the pre-training.  
 The effective batch size is the product of the ```--batch``` and ```---grad_accum``` command line arguments, standing for the batch size and the gradient accumulation, respectively.  
-In the above example, where both command line arguments are set to 32, the number of effective batch size is ```32x32=1024```.  
-As the ```--training_seqs``` is set to ```102400000``` in the example, it means that there are a total of ```102400000/(32x32)=100000``` update steps to be performed.
+In the above example, where both command line arguments are set to 32, the number of effective batch size is ```64x16=1024```.  
+As the ```--training_seqs``` is set to ```102400000``` in the example, it means that there are a total of ```102400000/(64x16)=100000``` update steps to be performed.
 
 ### Step 3: Learning the dictionary matrix for sparse coding
 
@@ -70,12 +70,46 @@ MLSM relies on performing sparse coding on the hidden states of an auxiliary mod
 The dictionary matrix can be leared with the below command
 ```
 python train_dict.py --transformer ${AUXILIARY_MODEL} \\
-                     --tokenizer ${TOKENIZER} \\
                      --corpus ${PRETRAINING_CORPUS} \\
                      --output ${SAVE_LOCATION} \\
                      --layer ${LAYER_TO_USE} \\
-                     --num_dict 3000
 ```
+The ```$AUXILIARY_MODEL``` specifies a HuggingFace Hub model identifier or a path to a directory where auxiliary model to be used for obtaining the latent semantic knownledge to be found.  
+(A separate tokenizer can also be specified, but it is not necessary if the $AUXILIARY_MODEL also comes with its own tokenizer.)  
+
+The dictionary matrix is to be saved under ```$SAVE_LOCATION```.  
+
+```$LAYER_TO_USE``` specifies the layer of the hidden representations of the auxiliary model to be used for dictionary learning.  
+This value is best set to the last or the penultimate layer of the auxiliary model.  
+For instance, for a 12 layer base-sized model, using the value 11 or 12 would be a reasonable choice.
+
+The dictionary learning procedure has two hyperparameters, the number of semantic atoms and the regularization coefficient affecting the sparsity of the latent semantic representations to learn from.  
+
+[We showed it earlier](https://aclanthology.org/2020.emnlp-main.683/) that the quality of the sparse representations obtained via dictionary learning is fairly robust to these choices.  
+Setting the number of dictionary atoms to `3000` and the regularization coefficient to `0.05` is generally a reliable choice of these hyperparameters (which are also the default values emplyed by this script).
+
+### Step 4: Pre-training using MLSM
+
+Pre-training with MLSM can be performed by running the same script that can be used for pre-training an auxiliary model, but requires a few extra command line parameters to be set as illustrated by the code snippet below:
+
+```
+python pretrainer.py --transformer ${MLSM_MODEL} \\
+                     --reinit \\
+                     --tokenizer ${TOKENIZER_NAME} \\
+                     --out_dir ${AUXILIARY_MODEL_LOCATION} \\
+                     --data_location ${PRETRAINING_DATA} \\
+                     --training_seqs 102400000 \\
+                     --batch 64 --grad_accum 16 \\
+                     --transformer2 ${AUXILIARY_MODEL} \\
+                     --dict_file ${DICTIONARY_LOCATION} \\
+                     --layer 11 \\
+                     --mlm_weight 0.2
+```
+The role of the command line parameters are the same as for Step 2, the main differences are the following:  
+* the `--transformer2` command line argument specifies the HuggingFace Hub identifier or the path of the auxiliary model to determine the target training distributions for pre-training,
+* the `--dict_file` argument specifies the location of the dictionary matrix learned during Step 3,  
+* the `--layer` argument has the same role as it had during the dictionary learning,
+* the script also allows for training MLSM jointly with MLM pre-training: if you want to train towards both losses, the extent to which MLM weight is considered is controlled by the parameter provided for `--mlm_weight`. E.g., the `0.2` value specified in the example means that the final loss to be employed during the pre-training is going to be $`\mathcal{L}_{MLSM} + 0.2 * \mathcal{L}_{MLM}`$.  In cases, when the MLM capabilites of the pre-trained model are not important, this value can be safely set to 0 (without affecting the fine-tuning capabilities of the model).  This additional loss term becomes useful if the model is also expected to provide meaningful replacement of `[MASK]`ed tokens. In the BabyLM Challenge this was the case, and the MLM loss was weighted equally to the MLSM loss term (i.e., `--mlm_weight 1.0`). This hyperparameter was not optimized due to limitations of computational resources, but if you do not want to test your models capabilities on tasks that require traditional MLM capabilities, going for the default value (which is `0.0`) should also be sufficient.
 
 ## BibTeX
 
